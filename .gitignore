@@ -1,0 +1,14 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars          # may contain secrets; bootstrap vars passed on CLI instead
+crash.log
+override.tf
+override.tf.json
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
