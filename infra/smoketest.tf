@@ -4,7 +4,7 @@
 resource "aws_ssm_parameter" "pipeline_smoke_test" {
   name  = "/saa-sprint/pipeline-check"
   type  = "String"
-  value = "hello from terraform via github actions oidc"
+  value = "Hello from terraform via github actions oidc"
 }
 
 output "smoke_test_value" {
