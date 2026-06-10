@@ -32,7 +32,7 @@ data "aws_iam_policy_document" "hcp_assume" {
     condition {
       test     = "StringLike"
       variable = "app.terraform.io:sub"
-      values   = ["organization:Hyfer-Org:project:*:workspace:aws_saa-lab:run_phase:*"]
+      values   = ["organization:${var.hcp_org}:project:*:workspace:${var.hcp_workspace}:run_phase:*"]
     }
   }
 }
