@@ -8,5 +8,6 @@ resource "aws_ssm_parameter" "pipeline_smoke_test" {
 }
 
 output "smoke_test_value" {
-  value = aws_ssm_parameter.pipeline_smoke_test.value
+  value     = aws_ssm_parameter.pipeline_smoke_test.value
+  sensitive = true
 }
