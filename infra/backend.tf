@@ -15,15 +15,3 @@ terraform {
   }
 }
 
-provider "aws" {
-  region = "us-east-1"
-
-  # Every resource the project creates gets tagged automatically -> easier
-  # cost tracking and cleanup, and good Well-Architected hygiene.
-  default_tags {
-    tags = {
-      Project   = "saa-sprint"
-      ManagedBy = "terraform"
-    }
-  }
-}

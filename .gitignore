@@ -12,3 +12,6 @@ override.tf.json
 .DS_Store
 .idea/
 .vscode/
+
+# Miscellaneous
+docs/
