@@ -1,109 +1,138 @@
-# SAA Sprint — Day 1 Runbook
+# SAA Sprint Lab
 
-Goal: a secured AWS account and a GitHub Actions pipeline that runs Terraform
-against AWS using **OIDC (no long-lived keys)**. By the end, merging a PR
-auto-applies infrastructure.
+A hands-on AWS Solutions Architect Associate (SAA-C03) study project. Each build
+day adds a layer of production-shaped AWS infrastructure, applied through a real
+CI/CD pipeline with no long-lived credentials anywhere.
 
-## Repo layout
-
-```
-saa-sprint/
-├── bootstrap/        # run ONCE, locally, with admin creds. Creates state
-│   │                 # backend + GitHub OIDC provider + CI role.
-│   ├── versions.tf
-│   ├── variables.tf
-│   ├── main.tf
-│   └── outputs.tf
-├── infra/            # the running project. Grows daily. Applied by CI.
-│   ├── backend.tf    # <- paste your state bucket name here after bootstrap
-│   └── smoketest.tf  # Day 1 test resource; delete on Day 2
-├── .github/workflows/
-│   └── terraform.yml # plan on PR, apply on merge to main
-└── .gitignore
-```
+The lab will host multiple apps over time. **FrontDesk** is the first: a guest
+check-in system with S3 assets, an instance role, a database, and a public
+endpoint. Each app is its own Terraform module and gets its own set of AWS
+resources following the shared naming and security conventions established here.
 
 ---
 
-## Step 1 — Secure the account (console, ~30–45 min)
+## Architecture goal
 
-Do these by hand once; they can't safely be Terraformed (chicken-and-egg).
+A multi-AZ, auto-scaling two-tier architecture:
 
-1. **Root user:** sign in as root → IAM → enable an MFA device on the root
-   user. Then stop using root.
-2. **Admin identity:** create an IAM user named `admin` with
-   `AdministratorAccess`, console + programmatic access, and its own MFA.
-   (IAM Identity Center is the more modern path if you prefer.)
-3. **Cost guardrails:**
-   - Billing → **Budgets** → create a monthly **cost budget** (e.g. $20) with
-     alerts at 80% and 100%. This is the reliable one.
-   - Optional CloudWatch billing alarm: enable *Receive Billing Alerts* in
-     Billing preferences first, then create the alarm **in us-east-1** (billing
-     metrics only live there).
-4. **CLI:** `aws configure` with the `admin` user's access key. Verify:
-   ```bash
-   aws sts get-caller-identity
-   ```
-   These admin keys are your ONLY long-lived credential. Use them for
-   bootstrap only; after that the pipeline uses OIDC. Consider deleting the
-   keys afterward and doing future bootstrap edits from AWS CloudShell.
+```
+Internet -> CloudFront -> ALB (public subnets)
+                          |
+                     ASG / EC2 (private subnets, SSM only)
+                          |
+              RDS Multi-AZ PostgreSQL  +  DynamoDB (audit)
+                          |
+              S3 (assets)  +  EFS (shared uploads)
+```
 
-## Step 2 — Create the repo
+All encrypted at rest (CMK), all in transit (TLS), all accessed via instance
+roles with no keys on disk anywhere.
 
-Create a fresh GitHub repo, then copy the contents of `saa-sprint/` into it
-and push the initial commit.
+---
 
-## Step 3 — Run the bootstrap (local, once)
+## Current infrastructure
+
+```
+aws_saa-lab/
+├── bootstrap/                  # Run ONCE locally. Creates HCP OIDC trust + IAM role.
+│   ├── main.tf                 # HCP Terraform OIDC provider + saa-sprint-hcp-terraform role
+│   ├── variables.tf            # github_org, github_repo, hcp_org, hcp_workspace (all defaulted)
+│   ├── outputs.tf              # hcp_role_arn -> paste into HCP workspace env vars
+│   └── versions.tf
+├── infra/                      # Root stack. HCP Terraform runs here on every push.
+│   ├── backend.tf              # HCP Terraform cloud backend (Hyfer-Org / aws_saa-lab)
+│   ├── locals.tf               # Single source of truth: org=saa, app=frontdesk, tags
+│   ├── versions.tf             # provider "aws" + default_tags driven by locals
+│   ├── main.tf                 # Composes module "foundation" + module "frontdesk"
+│   └── outputs.tf
+├── modules/
+│   ├── foundation/             # Shared platform: CMK (alias/saa-shared-cmk) + EBS default encryption
+│   ├── secure-bucket/          # Reusable: versioned, public-blocked, SSE-KMS S3 bucket
+│   ├── instance-role/          # Reusable: EC2 role + inline policy + SSM managed instance core
+│   └── frontdesk/              # App layer: saa-frontdesk-assets bucket + saa-frontdesk-instance role
+```
+
+### What exists in AWS today
+
+| Resource | Name | Purpose |
+|---|---|---|
+| KMS CMK | `alias/saa-shared-cmk` | Encrypts S3 objects and EBS volumes |
+| EBS default encryption | region-wide | All new volumes encrypted with CMK automatically |
+| S3 bucket | `saa-frontdesk-assets-<account_id>` | App asset storage, versioned, SSE-KMS |
+| IAM role | `saa-frontdesk-instance` | EC2 instance role, least-priv to bucket + CMK + SSM |
+| IAM OIDC provider | `app.terraform.io` | Lets HCP workers authenticate to AWS without keys |
+| IAM role | `saa-sprint-hcp-terraform` | Assumed by HCP per run via short-lived JWT |
+
+---
+
+## Pipeline
+
+```
+Push to GitHub
+      |
+HCP Terraform detects change via webhook
+      |
+HCP worker assumes saa-sprint-hcp-terraform role via OIDC (no stored keys)
+      |
+terraform plan / apply against AWS
+      |
+State stored in HCP Terraform (Hyfer-Org / aws_saa-lab workspace)
+```
+
+PR triggers a speculative plan posted as a GitHub check. Merge to `main` triggers auto-apply.
+
+---
+
+## Bootstrap (run once)
+
+Bootstrap creates the trust relationship between HCP Terraform and AWS. It runs
+locally with your admin IAM credentials, the only time long-lived keys are used.
 
 ```bash
 cd bootstrap
 terraform init
-terraform apply \
-  -var "github_org=YOUR_GH_USERNAME" \
-  -var "github_repo=YOUR_REPO_NAME" \
-  -var "state_bucket_name=saa-sprint-tfstate-CHANGE-ME-1234"
+terraform apply
 ```
 
-Note the three outputs: `state_bucket`, `lock_table`, `github_role_arn`.
-(The bootstrap keeps its state locally — fine for a sandbox.)
+Copy the `hcp_role_arn` output. In HCP workspace -> Variables add:
 
-## Step 4 — Wire up infra + the pipeline
+| Key | Value | Type |
+|---|---|---|
+| `TFC_AWS_PROVIDER_AUTH` | `true` | Environment |
+| `TFC_AWS_RUN_ROLE_ARN` | *(output from above)* | Environment |
 
-1. In `infra/backend.tf`, replace `REPLACE_WITH_state_bucket_OUTPUT` with the
-   `state_bucket` output value. Confirm `dynamodb_table` matches `lock_table`.
-2. In GitHub: repo → Settings → Secrets and variables → Actions → **Variables**
-   → add `AWS_ROLE_ARN` = the `github_role_arn` output. (It's a variable, not a
-   secret — there's nothing sensitive in a role ARN.)
-3. Initialize the remote backend locally and push:
-   ```bash
-   cd ../infra
-   terraform init   # uses the S3 backend now
-   ```
-4. Open a PR with the repo contents → the workflow runs `terraform plan`.
-   Merge it → the workflow runs `terraform apply` and creates the smoke-test
-   SSM parameter.
-
-## Checkpoint ✅
-
-- `aws sts get-caller-identity` works.
-- Budget alert exists.
-- A PR shows a `plan`; merging to `main` runs an `apply`.
-- Verify the result:
-  ```bash
-  aws ssm get-parameter --name /saa-sprint/pipeline-check
-  ```
-
-If that parameter exists and no long-lived keys were stored in GitHub, Day 1
-is done.
+Delete your local AWS keys after bootstrap. Use AWS CloudShell for any future
+bootstrap changes.
 
 ---
 
-## Two things to understand (not just copy)
+## Build roadmap
 
-- **Trust policy vs permissions policy.** The CI role's *trust* is tightly
-  scoped to `repo:org/repo:*` — only your workflows can assume it. Its
-  *permissions* are broad (AdministratorAccess) as a sandbox shortcut. Knowing
-  the difference between "who can assume a role" and "what the role can do" is
-  directly tested on the exam.
-- **Why no access keys in CI.** OIDC issues a short-lived token per run instead
-  of storing a static secret in GitHub. This is the same federation pattern
-  behind cross-account roles and identity providers you'll see in Domain 1.
+| Sprint | Focus | Key resources |
+|---|---|---|
+| ✅ | Pipeline | HCP Terraform, OIDC, state backend |
+| ✅ | IAM & encryption | CMK, EBS defaults, S3 bucket, instance role |
+| | VPC & networking | VPC, subnets, IGW, NAT GW, S3 gateway endpoint, SSM-only EC2 |
+| | Compute | Launch template, ALB, ASG, FrontDesk app on EC2 |
+| | Storage | S3 lifecycle to Glacier, EFS mount, versioned recovery |
+| | Database | RDS Multi-AZ, Secrets Manager, DynamoDB audit table, Lambda |
+| | Resilience | SQS, Route 53 failover, CloudWatch alarms |
+| | Performance & cost | CloudFront, Spot/serverless, Trusted Advisor |
+
+---
+
+## Cost note: GitLab Ultimate as an alternative
+
+This lab uses **GitHub + HCP Terraform**. For a real organisation, GitLab Ultimate
+($99/user/year) is worth evaluating: it includes a built-in Terraform state
+backend, eliminating the need for HCP Terraform entirely while keeping the same
+keyless OIDC workflow.
+
+GitLab CI/CD issues ID tokens (JWT) per pipeline run. The AWS trust policy points
+to your GitLab instance instead of `app.terraform.io` and the pattern is identical
+to what is built here. State is stored natively in GitLab with locking included.
+
+At 200 developers: GitHub Enterprise + HCP Terraform + GitHub Advanced Security
+runs approximately $15,000-$20,000/month. GitLab Ultimate SaaS covers the
+equivalent for approximately $1,650/month. The architecture and security posture
+are the same; the tooling cost is not.
