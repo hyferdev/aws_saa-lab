@@ -3,6 +3,12 @@ module "foundation" {
   tags   = merge(local.tags, { App = "shared" })
 }
 
+module "network" {
+  source      = "../modules/network"
+  name_prefix = local.shared_prefix
+  tags        = merge(local.tags, { App = "shared" })
+}
+
 module "frontdesk" {
   source      = "../modules/frontdesk"
   name_prefix = local.app_prefix
