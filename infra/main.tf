@@ -13,5 +13,10 @@ module "frontdesk" {
   source      = "../modules/frontdesk"
   name_prefix = local.app_prefix
   kms_key_arn = module.foundation.kms_key_arn
-  tags        = merge(local.tags, { App = local.app })
+
+  vpc_id             = module.network.vpc_id
+  public_subnet_ids  = module.network.public_subnet_ids
+  private_subnet_ids = module.network.private_subnet_ids
+
+  tags = merge(local.tags, { App = local.app })
 }

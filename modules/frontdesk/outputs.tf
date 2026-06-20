@@ -17,3 +17,18 @@ output "instance_role_arn" {
   description = "ARN of the frontdesk EC2 instance role."
   value       = module.instance_role.role_arn
 }
+
+output "alb_dns_name" {
+  description = "Public DNS name of the application load balancer."
+  value       = aws_lb.app.dns_name
+}
+
+output "alb_arn" {
+  description = "ARN of the application load balancer."
+  value       = aws_lb.app.arn
+}
+
+output "asg_name" {
+  description = "Name of the Auto Scaling Group."
+  value       = aws_autoscaling_group.app.name
+}
