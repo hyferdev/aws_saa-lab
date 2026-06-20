@@ -13,5 +13,8 @@ override.tf.json
 .idea/
 .vscode/
 
+# Node
+node_modules/
+
 # Miscellaneous
 docs/

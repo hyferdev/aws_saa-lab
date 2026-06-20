@@ -18,9 +18,14 @@ output "private_subnet_ids" {
   value       = module.network.private_subnet_ids
 }
 
-output "ssm_probe_instance_id" {
-  description = "Sprint 3 SSM probe instance ID. Remove in sprint 4."
-  value       = aws_instance.ssm_probe.id
+output "frontdesk_alb_dns" {
+  description = "Public DNS of the FrontDesk ALB."
+  value       = module.frontdesk.alb_dns_name
+}
+
+output "frontdesk_asg_name" {
+  description = "Name of the FrontDesk Auto Scaling Group."
+  value       = module.frontdesk.asg_name
 }
 
 output "frontdesk_assets_bucket" {
