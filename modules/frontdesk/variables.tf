@@ -19,30 +19,24 @@ variable "public_subnet_ids" {
 }
 
 variable "private_subnet_ids" {
-  description = "Private subnet IDs for the ASG instances."
+  description = "Private subnet IDs for ECS tasks."
   type        = list(string)
 }
 
-variable "instance_type" {
-  description = "EC2 instance type for the ASG launch template."
-  type        = string
-  default     = "t3.micro"
-}
-
-variable "asg_min" {
-  description = "Minimum number of instances in the ASG."
+variable "task_cpu" {
+  description = "Fargate task CPU units (256 = 0.25 vCPU)."
   type        = number
-  default     = 1
+  default     = 256
 }
 
-variable "asg_max" {
-  description = "Maximum number of instances in the ASG."
+variable "task_memory" {
+  description = "Fargate task memory in MiB."
   type        = number
-  default     = 3
+  default     = 512
 }
 
-variable "asg_desired" {
-  description = "Desired number of instances in the ASG."
+variable "desired_count" {
+  description = "Desired number of running ECS tasks."
   type        = number
   default     = 1
 }

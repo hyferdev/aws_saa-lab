@@ -32,17 +32,22 @@ variable "github_branch" {
   default     = "main"
 }
 
-variable "asg_name" {
-  description = "Name of the Auto Scaling Group that CodeDeploy deploys into."
+variable "ecr_repository_url" {
+  description = "Full URI of the ECR repository (without tag). Passed to CodeBuild as ECR_REPO_URI."
   type        = string
 }
 
-variable "alb_target_group_name" {
-  description = "Name of the ALB target group used for in-place traffic control."
+variable "ecr_repository_arn" {
+  description = "ARN of the ECR repository, used to scope CodeBuild push permissions."
   type        = string
 }
 
-variable "instance_role_name" {
-  description = "Name of the EC2 instance IAM role — pipeline attaches artifact-read policy here."
+variable "ecs_cluster_name" {
+  description = "Name of the ECS cluster to deploy into."
+  type        = string
+}
+
+variable "ecs_service_name" {
+  description = "Name of the ECS service to update on deploy."
   type        = string
 }

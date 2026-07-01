@@ -23,17 +23,17 @@ output "frontdesk_alb_dns" {
   value       = module.frontdesk.alb_dns_name
 }
 
-output "frontdesk_asg_name" {
-  description = "Name of the FrontDesk Auto Scaling Group."
-  value       = module.frontdesk.asg_name
-}
-
 output "frontdesk_assets_bucket" {
   description = "Name of the frontdesk assets bucket."
   value       = module.frontdesk.assets_bucket_id
 }
 
-output "frontdesk_instance_profile" {
-  description = "Instance profile name for frontdesk EC2 instances."
-  value       = module.frontdesk.instance_profile_name
+output "frontdesk_ecr_repository_url" {
+  description = "ECR repository URI for the frontdesk image."
+  value       = module.frontdesk.ecr_repository_url
+}
+
+output "frontdesk_ecs_cluster" {
+  description = "Name of the frontdesk ECS cluster."
+  value       = module.frontdesk.ecs_cluster_name
 }

@@ -1,16 +1,18 @@
 version: 0.2
 phases:
-  install:
-    runtime-versions:
-      nodejs: 20
+  pre_build:
     commands:
-      - cd apps/frontdesk && npm ci
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-7)
   build:
     commands:
-      - echo "Build complete — add npm test here when tests exist"
+      - docker build -t $ECR_REPO_URI:$IMAGE_TAG apps/frontdesk/
+      - docker push $ECR_REPO_URI:$IMAGE_TAG
+      - docker tag $ECR_REPO_URI:$IMAGE_TAG $ECR_REPO_URI:latest
+      - docker push $ECR_REPO_URI:latest
+  post_build:
+    commands:
+      - printf '[{"name":"frontdesk","imageUri":"%s"},{"name":"frontdesk-mcp","imageUri":"%s"}]' "$ECR_REPO_URI:$IMAGE_TAG" "$ECR_REPO_URI:$IMAGE_TAG" > imagedefinitions.json
 artifacts:
   files:
-    - apps/frontdesk/**/*
-    - appspec.yml
-    - scripts/codedeploy/**/*
-  discard-paths: no
+    - imagedefinitions.json

@@ -3,9 +3,9 @@ output "pipeline_name" {
   value       = aws_codepipeline.app.name
 }
 
-output "codedeploy_app_name" {
-  description = "Name of the CodeDeploy application."
-  value       = aws_codedeploy_app.app.name
+output "codebuild_project_name" {
+  description = "Name of the CodeBuild project."
+  value       = aws_codebuild_project.app.name
 }
 
 output "codestar_connection_arn" {

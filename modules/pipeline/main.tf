@@ -10,34 +10,9 @@ module "artifact_bucket" {
   tags        = var.tags
 }
 
-# Instances need to pull the artifact revision from S3 during deployment.
-resource "aws_iam_role_policy" "instance_artifact_access" {
-  name   = "${var.name_prefix}-codedeploy-artifact-access"
-  role   = var.instance_role_name
-  policy = data.aws_iam_policy_document.instance_artifact_access.json
-}
-
-data "aws_iam_policy_document" "instance_artifact_access" {
-  statement {
-    effect    = "Allow"
-    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
-    resources = ["${module.artifact_bucket.bucket_arn}/*"]
-  }
-  statement {
-    effect    = "Allow"
-    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
-    resources = [module.artifact_bucket.bucket_arn]
-  }
-  statement {
-    effect    = "Allow"
-    actions   = ["kms:Decrypt"]
-    resources = [var.kms_key_arn]
-  }
-}
-
 # --- CodeStar Connection (GitHub) ---
-# After apply, the connection must be manually activated in the AWS console
-# (Developer Tools -> Connections -> Pending) before the pipeline can run.
+# After first apply, activate the connection in the console:
+# Developer Tools -> Connections -> Pending -> Update pending connection.
 
 resource "aws_codestarconnections_connection" "github" {
   name          = "${var.name_prefix}-github"
@@ -83,6 +58,7 @@ data "aws_iam_policy_document" "codebuild_policy" {
       "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${var.name_prefix}-build:*",
     ]
   }
+
   statement {
     effect = "Allow"
     actions = [
@@ -95,17 +71,40 @@ data "aws_iam_policy_document" "codebuild_policy" {
       "${module.artifact_bucket.bucket_arn}/*",
     ]
   }
+
   statement {
     effect    = "Allow"
     actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
     resources = [var.kms_key_arn]
+  }
+
+  # Auth token request must be against *.
+  statement {
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  # Image push scoped to the specific repository.
+  statement {
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+    ]
+    resources = [var.ecr_repository_arn]
   }
 }
 
 resource "aws_codebuild_project" "app" {
   name          = "${var.name_prefix}-build"
   service_role  = aws_iam_role.codebuild.arn
-  build_timeout = 10
+  build_timeout = 15
   tags          = var.tags
 
   artifacts {
@@ -113,71 +112,20 @@ resource "aws_codebuild_project" "app" {
   }
 
   environment {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:7.0"
-    type         = "LINUX_CONTAINER"
+    compute_type    = "BUILD_GENERAL1_SMALL"
+    image           = "aws/codebuild/standard:7.0"
+    type            = "LINUX_CONTAINER"
+    privileged_mode = true
+
+    environment_variable {
+      name  = "ECR_REPO_URI"
+      value = var.ecr_repository_url
+    }
   }
 
   source {
     type = "CODEPIPELINE"
   }
-}
-
-# --- CodeDeploy ---
-
-data "aws_iam_policy_document" "codedeploy_assume" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["codedeploy.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "codedeploy" {
-  name               = "${var.name_prefix}-codedeploy"
-  assume_role_policy = data.aws_iam_policy_document.codedeploy_assume.json
-  tags               = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "codedeploy" {
-  role       = aws_iam_role.codedeploy.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
-}
-
-resource "aws_codedeploy_app" "app" {
-  name             = var.name_prefix
-  compute_platform = "Server"
-  tags             = var.tags
-}
-
-resource "aws_codedeploy_deployment_group" "app" {
-  app_name               = aws_codedeploy_app.app.name
-  deployment_group_name  = "${var.name_prefix}-dg"
-  service_role_arn       = aws_iam_role.codedeploy.arn
-  deployment_config_name = "CodeDeployDefault.OneAtATime"
-
-  autoscaling_groups = [var.asg_name]
-
-  deployment_style {
-    deployment_option = "WITH_TRAFFIC_CONTROL"
-    deployment_type   = "IN_PLACE"
-  }
-
-  load_balancer_info {
-    target_group_info {
-      name = var.alb_target_group_name
-    }
-  }
-
-  auto_rollback_configuration {
-    enabled = true
-    events  = ["DEPLOYMENT_FAILURE"]
-  }
-
-  tags = var.tags
 }
 
 # --- CodePipeline ---
@@ -217,28 +165,44 @@ data "aws_iam_policy_document" "pipeline_policy" {
       "${module.artifact_bucket.bucket_arn}/*",
     ]
   }
+
   statement {
     effect    = "Allow"
     actions   = ["codestar-connections:UseConnection"]
     resources = [aws_codestarconnections_connection.github.arn]
   }
+
   statement {
     effect    = "Allow"
     actions   = ["codebuild:BatchGetBuilds", "codebuild:StartBuild"]
     resources = [aws_codebuild_project.app.arn]
   }
+
   statement {
     effect = "Allow"
     actions = [
-      "codedeploy:CreateDeployment",
-      "codedeploy:GetApplication",
-      "codedeploy:GetApplicationRevision",
-      "codedeploy:GetDeployment",
-      "codedeploy:GetDeploymentConfig",
-      "codedeploy:RegisterApplicationRevision",
+      "ecs:DescribeServices",
+      "ecs:DescribeTaskDefinition",
+      "ecs:DescribeTasks",
+      "ecs:ListTasks",
+      "ecs:RegisterTaskDefinition",
+      "ecs:UpdateService",
     ]
     resources = ["*"]
   }
+
+  # Required so the pipeline can pass execution and task roles to ECS.
+  statement {
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["*"]
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+
   statement {
     effect    = "Allow"
     actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
@@ -302,13 +266,14 @@ resource "aws_codepipeline" "app" {
       name            = "Deploy"
       category        = "Deploy"
       owner           = "AWS"
-      provider        = "CodeDeploy"
+      provider        = "ECS"
       version         = "1"
       input_artifacts = ["build_output"]
 
       configuration = {
-        ApplicationName     = aws_codedeploy_app.app.name
-        DeploymentGroupName = aws_codedeploy_deployment_group.app.deployment_group_name
+        ClusterName = var.ecs_cluster_name
+        ServiceName = var.ecs_service_name
+        FileName    = "imagedefinitions.json"
       }
     }
   }

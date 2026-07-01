@@ -8,16 +8,6 @@ output "assets_bucket_arn" {
   value       = module.assets_bucket.bucket_arn
 }
 
-output "instance_profile_name" {
-  description = "Instance profile name to attach to EC2 launch templates."
-  value       = module.instance_role.instance_profile_name
-}
-
-output "instance_role_arn" {
-  description = "ARN of the frontdesk EC2 instance role."
-  value       = module.instance_role.role_arn
-}
-
 output "alb_dns_name" {
   description = "Public DNS name of the application load balancer."
   value       = aws_lb.app.dns_name
@@ -28,17 +18,22 @@ output "alb_arn" {
   value       = aws_lb.app.arn
 }
 
-output "asg_name" {
-  description = "Name of the Auto Scaling Group."
-  value       = aws_autoscaling_group.app.name
+output "ecr_repository_url" {
+  description = "Full URI of the ECR repository (without tag)."
+  value       = module.ecr.repository_url
 }
 
-output "alb_target_group_name" {
-  description = "Name of the main app ALB target group (used by CodeDeploy for traffic control)."
-  value       = aws_lb_target_group.app.name
+output "ecr_repository_arn" {
+  description = "ARN of the ECR repository."
+  value       = module.ecr.repository_arn
 }
 
-output "instance_role_name" {
-  description = "Name of the EC2 instance IAM role."
-  value       = module.instance_role.role_name
+output "ecs_cluster_name" {
+  description = "Name of the ECS cluster."
+  value       = aws_ecs_cluster.main.name
+}
+
+output "ecs_service_name" {
+  description = "Name of the ECS service."
+  value       = aws_ecs_service.app.name
 }
