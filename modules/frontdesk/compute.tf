@@ -144,18 +144,31 @@ resource "aws_lb_listener_rule" "mcp" {
 locals {
   user_data = <<-EOF
     #!/bin/bash
-    set -e
-    exec > /var/log/user-data.log 2>&1
+    exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+    set -ex
+
+    echo "--- user-data start ---"
 
     dnf install -y nodejs git ruby wget
-    npm install -g pm2
+    echo "--- dnf done ---"
 
-    # CodeDeploy agent — required for pipeline deployments.
-    wget -q "https://aws-codedeploy-${data.aws_region.current.region}.s3.${data.aws_region.current.region}.amazonaws.com/latest/install"
+    npm install -g pm2
+    echo "--- pm2 done ---"
+
+    # Ensure SSM agent is running so the instance appears in Fleet Manager.
+    systemctl enable amazon-ssm-agent
+    systemctl start amazon-ssm-agent || true
+    echo "--- ssm-agent started ---"
+
+    # CodeDeploy agent.
+    wget "https://aws-codedeploy-${data.aws_region.current.region}.s3.${data.aws_region.current.region}.amazonaws.com/latest/install"
     chmod +x ./install
     ./install auto
     systemctl enable codedeploy-agent
     systemctl start codedeploy-agent
+    echo "--- codedeploy-agent started ---"
+
+    echo "--- user-data complete ---"
   EOF
 }
 
