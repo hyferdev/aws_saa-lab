@@ -1,3 +1,5 @@
+data "aws_region" "current" {}
+
 data "aws_ami" "al2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -149,9 +151,7 @@ locals {
     npm install -g pm2
 
     # CodeDeploy agent — required for pipeline deployments.
-    # Resolve region at runtime so the AMI stays region-agnostic.
-    REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
-    wget -q "https://aws-codedeploy-$${REGION}.s3.$${REGION}.amazonaws.com/latest/install"
+    wget -q "https://aws-codedeploy-${data.aws_region.current.region}.s3.${data.aws_region.current.region}.amazonaws.com/latest/install"
     chmod +x ./install
     ./install auto
     systemctl enable codedeploy-agent
