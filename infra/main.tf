@@ -20,3 +20,15 @@ module "frontdesk" {
 
   tags = merge(local.tags, { App = local.app })
 }
+
+module "pipeline" {
+  source      = "../modules/pipeline"
+  name_prefix = local.app_prefix
+  kms_key_arn = module.foundation.kms_key_arn
+
+  asg_name              = module.frontdesk.asg_name
+  alb_target_group_name = module.frontdesk.alb_target_group_name
+  instance_role_name    = module.frontdesk.instance_role_name
+
+  tags = merge(local.tags, { App = local.app })
+}

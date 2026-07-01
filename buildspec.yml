@@ -1,0 +1,16 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - cd apps/frontdesk && npm ci
+  build:
+    commands:
+      - echo "Build complete — add npm test here when tests exist"
+artifacts:
+  files:
+    - apps/frontdesk/**/*
+    - appspec.yml
+    - scripts/codedeploy/**/*
+  discard-paths: no

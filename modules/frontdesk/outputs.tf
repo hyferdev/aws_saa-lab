@@ -32,3 +32,13 @@ output "asg_name" {
   description = "Name of the Auto Scaling Group."
   value       = aws_autoscaling_group.app.name
 }
+
+output "alb_target_group_name" {
+  description = "Name of the main app ALB target group (used by CodeDeploy for traffic control)."
+  value       = aws_lb_target_group.app.name
+}
+
+output "instance_role_name" {
+  description = "Name of the EC2 instance IAM role."
+  value       = module.instance_role.role_name
+}

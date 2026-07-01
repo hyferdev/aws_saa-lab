@@ -145,16 +145,17 @@ locals {
     set -e
     exec > /var/log/user-data.log 2>&1
 
-    dnf install -y nodejs git
+    dnf install -y nodejs git ruby wget
     npm install -g pm2
 
-    git clone https://github.com/hyferdev/aws_saa-lab.git /opt/saa-lab
-    cd /opt/saa-lab/apps/frontdesk
-    npm install --production
-
-    pm2 start ecosystem.config.cjs
-    pm2 startup systemd -u root --hp /root | bash
-    pm2 save
+    # CodeDeploy agent — required for pipeline deployments.
+    # Resolve region at runtime so the AMI stays region-agnostic.
+    REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+    wget -q "https://aws-codedeploy-$${REGION}.s3.$${REGION}.amazonaws.com/latest/install"
+    chmod +x ./install
+    ./install auto
+    systemctl enable codedeploy-agent
+    systemctl start codedeploy-agent
   EOF
 }
 
