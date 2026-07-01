@@ -30,10 +30,10 @@ output "ecr_repository_arn" {
 
 output "ecs_cluster_name" {
   description = "Name of the ECS cluster."
-  value       = aws_ecs_cluster.main.name
+  value       = var.name_prefix
 }
 
 output "ecs_service_name" {
   description = "Name of the ECS service."
-  value       = aws_ecs_service.app.name
+  value       = var.name_prefix
 }
