@@ -315,4 +315,6 @@ resource "aws_ecs_service" "app" {
   lifecycle {
     ignore_changes = [task_definition]
   }
+
+  depends_on = [aws_lb_listener.http, aws_lb_listener_rule.mcp]
 }
