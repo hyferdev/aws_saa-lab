@@ -186,6 +186,7 @@ data "aws_iam_policy_document" "pipeline_policy" {
       "ecs:DescribeTasks",
       "ecs:ListTasks",
       "ecs:RegisterTaskDefinition",
+      "ecs:TagResource",
       "ecs:UpdateService",
     ]
     resources = ["*"]
